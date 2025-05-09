@@ -25,15 +25,20 @@ def get_url_status(url, timeout, headers, proxy, retries, retry_delay):
             else:
                 redirection = "No redirection"
 
+            logging.info(f"Checked {url}: {status_code}, {redirection}, {load_time:.2f}s")
             return status_code, redirection, load_time, response.headers
 
+        except requests.exceptions.Timeout:
+            logging.error(f"Timeout occurred for {url}. Retrying...")
         except requests.exceptions.RequestException as e:
-            attempt += 1
-            logging.error(f"Attempt {attempt} failed for {url} with error: {str(e)}")
-            if attempt < retries:
-                time.sleep(retry_delay)
-            else:
-                return None, str(e), None, None
+            logging.error(f"Error for {url}: {str(e)}")
+        
+        attempt += 1
+        if attempt < retries:
+            time.sleep(retry_delay)
+        else:
+            logging.error(f"Max retries reached for {url}.")
+            return None, "Max retries reached", None, None
     return None, "Max retries reached", None, None
 
 
@@ -42,7 +47,7 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
     headers = {'User-Agent': user_agent}
     
     results = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(urls), 10)) as executor:
         futures = {executor.submit(get_url_status, url, timeout, headers, proxy, retries, retry_delay): url for url in urls}
         
         for future in concurrent.futures.as_completed(futures):
@@ -63,16 +68,18 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
                 continue
             
             results.append(result)
-            logging.info(f"Checked {url}: {status_code}, {redirection}, {load_time:.2f}s")
 
     if output_file:
-        with open(output_file, "w", encoding="utf-8") as file:
-            if json_output:
-                json.dump(results, file, indent=4)
-            else:
-                for res in results:
-                    file.write(f"{res}\n")
-        logging.info(f"Results saved to {output_file}")
+        try:
+            with open(output_file, "w", encoding="utf-8") as file:
+                if json_output:
+                    json.dump(results, file, indent=4)
+                else:
+                    for res in results:
+                        file.write(f"{res}\n")
+            logging.info(f"Results saved to {output_file}")
+        except Exception as e:
+            logging.error(f"Error saving results to {output_file}: {str(e)}")
 
 
 def validate_url(url):
@@ -82,6 +89,20 @@ def validate_url(url):
         return all([result.scheme, result.netloc])
     except ValueError:
         return False
+
+
+def validate_args(args):
+    """Validate the command-line arguments."""
+    if args.timeout <= 0:
+        logging.error("Timeout must be a positive integer.")
+        return False
+    if args.retries < 0:
+        logging.error("Retries cannot be negative.")
+        return False
+    if args.retry_delay < 0:
+        logging.error("Retry delay cannot be negative.")
+        return False
+    return True
 
 
 def main():
@@ -100,6 +121,9 @@ def main():
     parser.add_argument('--retry-delay', type=int, default=2, help="Delay between retries in seconds (default: 2).")
 
     args = parser.parse_args()
+
+    if not validate_args(args):
+        return
 
     invalid_urls = [url for url in args.urls if not validate_url(url)]
     if invalid_urls:
