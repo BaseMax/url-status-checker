@@ -8,6 +8,12 @@ A simple CLI tool to check the status codes, redirections, and load times for a 
 - Detect if the URL is redirected and where it redirects.
 - Measure the load time for the URL to fully load.
 
+## Testing
+
+```bash
+$ python3 url_status_checker.py https://www.google.com https://www.nonexistentdomain.abc --verbose --json-output --output results.json
+```
+
 ## Installation
 
 1. Clone the repository:
