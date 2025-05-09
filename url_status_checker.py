@@ -3,7 +3,10 @@ import requests
 import time
 import concurrent.futures
 import json
+import logging
 from urllib.parse import urlparse
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def get_url_status(url, timeout, headers, proxy, retries, retry_delay):
     """Checks the status code, redirection, and load time of the URL."""
@@ -26,6 +29,7 @@ def get_url_status(url, timeout, headers, proxy, retries, retry_delay):
 
         except requests.exceptions.RequestException as e:
             attempt += 1
+            logging.error(f"Attempt {attempt} failed for {url} with error: {str(e)}")
             if attempt < retries:
                 time.sleep(retry_delay)
             else:
@@ -38,13 +42,12 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
     headers = {'User-Agent': user_agent}
     
     results = []
-
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(get_url_status, url, timeout, headers, proxy, retries, retry_delay): url for url in urls}
         
         for future in concurrent.futures.as_completed(futures):
             url = futures[future]
-            status_code, redirection, load_time, headers = future.result()
+            status_code, redirection, load_time, response_headers = future.result()
 
             result = {"URL": url}
             if status_code is None:
@@ -53,14 +56,14 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
                 result["Status Code"] = status_code
                 result["Redirection"] = redirection
                 result["Load Time"] = f"{load_time:.2f} seconds"
-                if verbose and headers:
-                    result["Response Headers"] = dict(headers)
+                if verbose and response_headers:
+                    result["Response Headers"] = dict(response_headers)
 
             if status_filter and status_code != status_filter:
                 continue
             
             results.append(result)
-            print(result)
+            logging.info(f"Checked {url}: {status_code}, {redirection}, {load_time:.2f}s")
 
     if output_file:
         with open(output_file, "w", encoding="utf-8") as file:
@@ -69,7 +72,16 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
             else:
                 for res in results:
                     file.write(f"{res}\n")
-        print(f"\nResults saved to {output_file}")
+        logging.info(f"Results saved to {output_file}")
+
+
+def validate_url(url):
+    """Validate URL format before sending requests."""
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
 
 
 def main():
@@ -89,6 +101,11 @@ def main():
 
     args = parser.parse_args()
 
+    invalid_urls = [url for url in args.urls if not validate_url(url)]
+    if invalid_urls:
+        logging.error(f"Invalid URL(s) detected: {', '.join(invalid_urls)}")
+        return
+    
     proxy = None
     if args.proxy:
         proxy = {"http": args.proxy, "https": args.proxy}
