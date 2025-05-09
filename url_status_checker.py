@@ -63,7 +63,7 @@ def check_urls(urls, timeout, verbose, output_file, user_agent, proxy, status_fi
             print(result)
 
     if output_file:
-        with open(output_file, "w") as file:
+        with open(output_file, "w", encoding="utf-8") as file:
             if json_output:
                 json.dump(results, file, indent=4)
             else:
