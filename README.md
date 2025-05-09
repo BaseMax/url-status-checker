@@ -19,7 +19,7 @@ $ python3 url_status_checker.py https://www.google.com https://www.nonexistentdo
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/yourusername/url-status-checker.git
+    git clone https://github.com/BaseMax/url-status-checker.git
     ```
 
 2. Install the required dependencies:
